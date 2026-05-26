@@ -1,0 +1,1667 @@
+<?php
+session_start();
+
+// ─── PHP BACKEND LOGIC ──────────────────────────────────────────────────────
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json');
+
+    switch ($_POST['action']) {
+
+        case 'add_to_cart':
+            $id    = intval($_POST['product_id']);
+            $name  = htmlspecialchars($_POST['product_name']);
+            $price = floatval($_POST['product_price']);
+            $img   = htmlspecialchars($_POST['product_img']);
+            if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
+            if (isset($_SESSION['cart'][$id])) {
+                $_SESSION['cart'][$id]['qty']++;
+            } else {
+                $_SESSION['cart'][$id] = ['name'=>$name,'price'=>$price,'img'=>$img,'qty'=>1];
+            }
+            echo json_encode(['ok'=>true,'count'=>array_sum(array_column($_SESSION['cart'],'qty'))]);
+            exit;
+
+        case 'remove_from_cart':
+            $id = intval($_POST['product_id']);
+            unset($_SESSION['cart'][$id]);
+            $total = 0;
+            foreach ($_SESSION['cart'] ?? [] as $item) $total += $item['price']*$item['qty'];
+            echo json_encode(['ok'=>true,'count'=>array_sum(array_column($_SESSION['cart']??[],'qty')),'total'=>$total,'cart'=>$_SESSION['cart']??[]]);
+            exit;
+
+        case 'get_cart':
+            $total = 0;
+            foreach ($_SESSION['cart'] ?? [] as $item) $total += $item['price']*$item['qty'];
+            echo json_encode(['cart'=>$_SESSION['cart']??[],'count'=>array_sum(array_column($_SESSION['cart']??[],'qty')),'total'=>$total]);
+            exit;
+
+        case 'newsletter':
+            $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                // In production: save to DB / mailing list API
+                echo json_encode(['status'=>'success','msg'=>'Welcome to the pack!']);
+            } else {
+                echo json_encode(['status'=>'error','msg'=>'Invalid email address.']);
+            }
+            exit;
+
+        case 'contact':
+            $name  = htmlspecialchars($_POST['name'] ?? '');
+            $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
+            $msg   = htmlspecialchars($_POST['message'] ?? '');
+            if ($name && filter_var($email, FILTER_VALIDATE_EMAIL) && strlen($msg) > 5) {
+                // In production: mail($to, $subject, $body)
+                echo json_encode(['status'=>'success','msg'=>'Message received. We\'ll be in touch.']);
+            } else {
+                echo json_encode(['status'=>'error','msg'=>'Please fill all fields correctly.']);
+            }
+            exit;
+    }
+}
+
+$cart_count = isset($_SESSION['cart']) ? array_sum(array_column($_SESSION['cart'], 'qty')) : 0;
+$year = date('Y');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bear Tribleas — Raw. Refined. Wild.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ═══ RESET & ROOT ══════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0a09;
+  --surface:#141210;
+  --surface2:#1d1a17;
+  --gold:#c9953a;
+  --gold-lt:#e8b95a;
+  --cream:#f0e9dd;
+  --cream-dim:#b8a99a;
+  --brown:#7a4f2e;
+  --text:#ede6db;
+  --muted:#7a6f63;
+  --border:rgba(201,149,58,0.18);
+  --nav-h:80px;
+  --ff-display:'Bebas Neue',sans-serif;
+  --ff-serif:'Cormorant Garamond',Georgia,serif;
+  --ff-body:'DM Sans',sans-serif;
+  --ff-mono:'Space Mono',monospace;
+  --ease-out:cubic-bezier(.16,1,.3,1);
+}
+html{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:var(--gold) var(--surface)}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-body);font-size:16px;line-height:1.6;overflow-x:hidden}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+button{cursor:pointer;border:none;background:none;font-family:inherit}
+
+/* ═══ SCROLLBAR ═════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--gold);border-radius:2px}
+
+/* ═══ NAV ════════════════════════════════════════════════════════════════════ */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:900;
+  height:var(--nav-h);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 5%;
+  transition:background .4s,backdrop-filter .4s,border-color .4s;
+  border-bottom:1px solid transparent;
+}
+nav.scrolled{
+  background:rgba(11,10,9,.88);
+  backdrop-filter:blur(18px);
+  border-color:var(--border);
+}
+.nav-logo{
+  font-family:var(--ff-display);
+  font-size:28px;
+  letter-spacing:.1em;
+  color:var(--cream);
+}
+.nav-logo span{color:var(--gold)}
+.nav-links{display:flex;gap:36px;align-items:center}
+.nav-links a{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--cream-dim);
+  transition:color .25s;
+  position:relative;
+}
+.nav-links a::after{
+  content:'';position:absolute;bottom:-4px;left:0;width:0;height:1px;
+  background:var(--gold);transition:width .3s var(--ease-out);
+}
+.nav-links a:hover{color:var(--cream)}
+.nav-links a:hover::after{width:100%}
+.nav-right{display:flex;align-items:center;gap:20px}
+.cart-btn{
+  position:relative;
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--cream);
+  padding:10px 22px;
+  border:1px solid var(--border);
+  border-radius:2px;
+  transition:background .25s,border-color .25s;
+}
+.cart-btn:hover{background:var(--gold);border-color:var(--gold);color:var(--bg)}
+.cart-count{
+  position:absolute;top:-8px;right:-8px;
+  background:var(--gold);color:var(--bg);
+  font-size:10px;font-weight:700;
+  width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+}
+.hamburger{display:none;flex-direction:column;gap:5px;padding:4px}
+.hamburger span{display:block;width:24px;height:1.5px;background:var(--cream);transition:all .3s}
+
+/* ═══ HERO ═══════════════════════════════════════════════════════════════════ */
+.hero{
+  min-height:100vh;
+  display:grid;grid-template-columns:1fr 1fr;
+  position:relative;overflow:hidden;
+}
+.hero-left{
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:0 6% 8% 8%;
+  position:relative;z-index:2;
+}
+.hero-eyebrow{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.25em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:24px;
+  opacity:0;transform:translateY(20px);
+  animation:fadeUp .8s var(--ease-out) .3s forwards;
+}
+.hero-title{
+  font-family:var(--ff-display);
+  font-size:clamp(72px,9vw,148px);
+  line-height:.92;
+  letter-spacing:.02em;
+  color:var(--cream);
+  opacity:0;transform:translateY(30px);
+  animation:fadeUp 1s var(--ease-out) .5s forwards;
+}
+.hero-title em{
+  font-family:var(--ff-serif);
+  font-style:italic;font-weight:300;
+  color:var(--gold);
+  font-size:.72em;
+  display:block;line-height:1;
+}
+.hero-sub{
+  margin-top:28px;
+  font-size:15px;color:var(--cream-dim);
+  max-width:380px;line-height:1.7;
+  opacity:0;transform:translateY(20px);
+  animation:fadeUp .8s var(--ease-out) .8s forwards;
+}
+.hero-ctas{
+  margin-top:44px;display:flex;gap:16px;align-items:center;
+  opacity:0;transform:translateY(20px);
+  animation:fadeUp .8s var(--ease-out) 1s forwards;
+}
+.btn-primary{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:16px 36px;
+  background:var(--gold);color:var(--bg);
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.15em;text-transform:uppercase;
+  border-radius:2px;font-weight:700;
+  transition:background .25s,transform .2s;
+}
+.btn-primary:hover{background:var(--gold-lt);transform:translateY(-2px)}
+.btn-outline{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:16px 28px;
+  border:1px solid var(--border);color:var(--cream);
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.15em;text-transform:uppercase;
+  border-radius:2px;
+  transition:border-color .25s,color .25s,transform .2s;
+}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-2px)}
+
+.hero-right{
+  position:relative;overflow:hidden;
+}
+.hero-img-grid{
+  position:absolute;inset:0;
+  display:grid;grid-template-columns:1fr 1fr;
+  grid-template-rows:1fr 1fr;
+  gap:3px;
+}
+.hero-img-cell{
+  background:var(--surface2);
+  overflow:hidden;
+}
+.hero-img-cell:nth-child(1){grid-row:1/3;} 
+.hero-img-cell:nth-child(2){} 
+.hero-img-cell:nth-child(3){} 
+.hero-img-cell .img-placeholder{
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-serif);
+  font-style:italic;color:var(--muted);font-size:13px;
+}
+.hero-bear-svg{
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;opacity:.06;pointer-events:none;z-index:0;
+}
+.hero-scroll{
+  position:absolute;bottom:40px;left:8%;
+  display:flex;align-items:center;gap:12px;
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);
+  opacity:0;animation:fadeUp .8s var(--ease-out) 1.4s forwards;
+}
+.hero-scroll-line{
+  width:40px;height:1px;background:var(--muted);
+  animation:scrollLine 1.5s ease-in-out infinite alternate;
+}
+@keyframes scrollLine{to{width:60px;background:var(--gold)}}
+
+.hero::after{
+  content:'';position:absolute;
+  bottom:-1px;left:0;right:0;height:80px;
+  background:var(--bg);
+  clip-path:polygon(0 100%,100% 0,100% 100%);
+  z-index:3;
+}
+
+/* ═══ TICKER ═════════════════════════════════════════════════════════════════ */
+.ticker{
+  background:var(--gold);
+  padding:14px 0;overflow:hidden;
+  position:relative;z-index:2;
+}
+.ticker-track{
+  display:flex;gap:0;
+  animation:ticker 22s linear infinite;
+  white-space:nowrap;
+}
+.ticker-item{
+  display:inline-flex;align-items:center;gap:24px;
+  padding:0 32px;
+  font-family:var(--ff-display);font-size:15px;
+  letter-spacing:.15em;color:var(--bg);
+}
+.ticker-dot{
+  width:5px;height:5px;background:var(--bg);
+  border-radius:50%;opacity:.5;flex-shrink:0;
+}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ═══ SECTION COMMONS ═══════════════════════════════════════════════════════ */
+section{padding:120px 8%}
+.sec-label{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.25em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:16px;
+}
+.sec-title{
+  font-family:var(--ff-display);
+  font-size:clamp(38px,5vw,72px);
+  letter-spacing:.03em;color:var(--cream);
+  line-height:1;
+}
+.sec-title em{
+  font-family:var(--ff-serif);
+  font-style:italic;font-weight:300;
+  color:var(--gold-lt);
+}
+.reveal{
+  opacity:0;transform:translateY(32px);
+  transition:opacity .9s var(--ease-out),transform .9s var(--ease-out);
+}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ═══ COLLECTIONS STRIP ═════════════════════════════════════════════════════ */
+.collections{background:var(--bg)}
+.collections-header{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-bottom:56px;
+}
+.collections-grid{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr;
+  grid-template-rows:420px 280px;
+  gap:3px;
+}
+.col-card{
+  position:relative;overflow:hidden;
+  background:var(--surface2);
+  cursor:pointer;
+}
+.col-card:nth-child(1){grid-row:1/3}
+.col-card:nth-child(4){grid-column:2/4}
+.col-card-bg{
+  position:absolute;inset:0;
+  transition:transform .8s var(--ease-out);
+}
+.col-card:hover .col-card-bg{transform:scale(1.06)}
+.col-card:nth-child(1) .col-card-bg{background:linear-gradient(145deg,#1a140e 0%,#2d1f12 40%,#1a0f07 100%)}
+.col-card:nth-child(2) .col-card-bg{background:linear-gradient(135deg,#0f1510 0%,#1c2a18 60%,#111a0e 100%)}
+.col-card:nth-child(3) .col-card-bg{background:linear-gradient(155deg,#150f0a 0%,#261910 60%,#0f0a06 100%)}
+.col-card:nth-child(4) .col-card-bg{background:linear-gradient(130deg,#12120f 0%,#1e1c14 50%,#0c0b09 100%)}
+.col-card-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,.75) 0%,rgba(0,0,0,.1) 60%);
+}
+.col-card-content{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:32px;
+}
+.col-card-tag{
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;
+}
+.col-card-title{
+  font-family:var(--ff-display);
+  font-size:28px;letter-spacing:.06em;
+  color:var(--cream);line-height:1;
+}
+.col-card:nth-child(1) .col-card-title{font-size:42px}
+.col-card-arrow{
+  position:absolute;top:24px;right:24px;
+  width:40px;height:40px;border:1px solid rgba(201,149,58,.3);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--gold);font-size:18px;
+  transform:translateX(10px);opacity:0;
+  transition:all .35s var(--ease-out);
+}
+.col-card:hover .col-card-arrow{transform:translateX(0);opacity:1}
+.col-card-texture{
+  position:absolute;inset:0;
+  background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(255,255,255,.012) 2px,rgba(255,255,255,.012) 4px);
+}
+.col-card-watermark{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  font-size:140px;opacity:.04;
+  pointer-events:none;
+  color:var(--cream);
+  font-family:var(--ff-serif);
+}
+
+/* ═══ ABOUT ══════════════════════════════════════════════════════════════════ */
+.about{
+  background:var(--surface);
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:80px;align-items:center;
+  position:relative;overflow:hidden;
+}
+.about::before{
+  content:'B';
+  position:absolute;right:-6%;top:50%;
+  transform:translateY(-50%);
+  font-family:var(--ff-display);
+  font-size:400px;
+  color:var(--surface2);
+  line-height:1;pointer-events:none;
+  letter-spacing:-.05em;
+}
+.about-visual{
+  position:relative;
+  aspect-ratio:4/5;
+  background:var(--surface2);
+}
+.about-visual-inner{
+  position:absolute;inset:0;
+  background:linear-gradient(160deg,#1c150d 0%,#2a1e12 50%,#160f08 100%);
+}
+.about-visual-badge{
+  position:absolute;bottom:32px;right:-24px;
+  width:120px;height:120px;
+  background:var(--gold);border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;
+}
+.about-visual-badge .year{
+  font-family:var(--ff-display);font-size:32px;
+  color:var(--bg);line-height:1;
+}
+.about-visual-badge .label{
+  font-family:var(--ff-mono);font-size:8px;
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--bg);opacity:.7;
+}
+.about-visual-line{
+  position:absolute;top:32px;left:-24px;
+  width:3px;height:60%;
+  background:linear-gradient(to bottom,var(--gold),transparent);
+}
+.about-copy .sec-title{margin-bottom:28px}
+.about-copy p{
+  color:var(--cream-dim);line-height:1.8;
+  font-size:15px;margin-bottom:18px;
+}
+.about-copy p strong{color:var(--cream);font-weight:500}
+.about-stats{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:1px;
+  margin-top:48px;border-top:1px solid var(--border);padding-top:48px;
+}
+.about-stat .num{
+  font-family:var(--ff-display);font-size:52px;
+  color:var(--gold);line-height:1;
+}
+.about-stat .label{
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);margin-top:4px;
+}
+
+/* ═══ PRODUCTS ═══════════════════════════════════════════════════════════════ */
+.products{background:var(--bg)}
+.products-header{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-bottom:56px;flex-wrap:wrap;gap:24px;
+}
+.filter-tabs{display:flex;gap:8px}
+.filter-tab{
+  padding:9px 20px;
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);
+  border:1px solid transparent;border-radius:2px;
+  transition:all .25s;
+}
+.filter-tab.active,.filter-tab:hover{
+  border-color:var(--border);color:var(--gold);
+}
+.filter-tab.active{background:rgba(201,149,58,.08)}
+.products-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:2px;
+}
+.product-card{
+  background:var(--surface);
+  position:relative;overflow:hidden;
+  transition:transform .4s var(--ease-out);
+}
+.product-card:hover{transform:translateY(-4px)}
+.product-img{
+  aspect-ratio:3/4;
+  background:var(--surface2);
+  position:relative;overflow:hidden;
+}
+.product-img-bg{
+  position:absolute;inset:0;
+  transition:transform .6s var(--ease-out);
+}
+.product-card:hover .product-img-bg{transform:scale(1.05)}
+.product-card:nth-child(1) .product-img-bg{background:radial-gradient(ellipse at 30% 20%,#2a1c0e 0%,#0f0b07 70%)}
+.product-card:nth-child(2) .product-img-bg{background:radial-gradient(ellipse at 70% 30%,#12201a 0%,#080f0b 70%)}
+.product-card:nth-child(3) .product-img-bg{background:radial-gradient(ellipse at 40% 60%,#1a1208 0%,#0c0905 70%)}
+.product-card:nth-child(4) .product-img-bg{background:radial-gradient(ellipse at 60% 20%,#1e1210 0%,#0d0907 70%)}
+.product-card:nth-child(5) .product-img-bg{background:radial-gradient(ellipse at 30% 70%,#0e1520 0%,#08090f 70%)}
+.product-card:nth-child(6) .product-img-bg{background:radial-gradient(ellipse at 65% 40%,#1c1505 0%,#0b0903 70%)}
+.product-icon{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  font-family:var(--ff-serif);font-style:italic;
+  font-size:72px;color:rgba(201,149,58,.12);
+  pointer-events:none;white-space:nowrap;
+}
+.product-badge{
+  position:absolute;top:16px;left:16px;
+  background:var(--gold);color:var(--bg);
+  font-family:var(--ff-mono);font-size:9px;
+  letter-spacing:.15em;text-transform:uppercase;
+  padding:5px 10px;border-radius:1px;
+  font-weight:700;
+}
+.product-badge.new{background:var(--cream);color:var(--bg)}
+.product-badge.sale{background:#8b2020}
+.product-quick-add{
+  position:absolute;bottom:16px;left:16px;right:16px;
+  background:var(--gold);color:var(--bg);
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.15em;text-transform:uppercase;
+  padding:13px;border-radius:2px;font-weight:700;
+  transform:translateY(80px);opacity:0;
+  transition:all .35s var(--ease-out);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.product-card:hover .product-quick-add{transform:translateY(0);opacity:1}
+.product-quick-add:hover{background:var(--gold-lt)}
+.product-info{padding:20px 20px 24px}
+.product-name{
+  font-family:var(--ff-serif);
+  font-size:20px;font-weight:400;
+  color:var(--cream);margin-bottom:6px;
+}
+.product-meta{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.product-price{
+  font-family:var(--ff-mono);font-size:15px;
+  color:var(--gold);
+}
+.product-price .original{
+  font-size:11px;color:var(--muted);
+  text-decoration:line-through;margin-left:8px;
+}
+.product-sizes{
+  display:flex;gap:4px;
+}
+.size-dot{
+  width:28px;height:28px;
+  border:1px solid var(--border);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-mono);font-size:9px;color:var(--muted);
+  transition:all .2s;
+}
+.size-dot:hover{border-color:var(--gold);color:var(--gold);cursor:pointer}
+
+/* ═══ TESTIMONIALS ════════════════════════════════════════════════════════ */
+.testimonials{
+  background:var(--surface);
+  text-align:center;
+  position:relative;overflow:hidden;
+}
+.testimonials::before{
+  content:'\201C';
+  position:absolute;top:-40px;left:50%;
+  transform:translateX(-50%);
+  font-family:var(--ff-serif);font-size:500px;
+  color:var(--surface2);line-height:1;
+  pointer-events:none;
+}
+.testimonials-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:2px;margin-top:64px;
+  text-align:left;
+}
+.testi-card{
+  background:var(--surface2);
+  padding:36px 32px;
+  position:relative;
+}
+.testi-card::before{
+  content:'';
+  position:absolute;top:0;left:0;width:3px;height:100%;
+  background:linear-gradient(to bottom,var(--gold),transparent);
+}
+.testi-stars{
+  color:var(--gold);margin-bottom:18px;
+  font-size:14px;letter-spacing:3px;
+}
+.testi-text{
+  font-family:var(--ff-serif);
+  font-size:17px;font-style:italic;
+  color:var(--cream);line-height:1.7;
+  margin-bottom:24px;
+}
+.testi-author{
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);
+}
+.testi-author span{color:var(--gold)}
+
+/* ═══ NEWSLETTER ══════════════════════════════════════════════════════════ */
+.newsletter{
+  background:var(--bg);
+  text-align:center;
+  padding:100px 8%;
+  position:relative;overflow:hidden;
+}
+.newsletter-inner{
+  max-width:600px;margin:0 auto;position:relative;z-index:1;
+}
+.newsletter-form{
+  display:flex;gap:0;margin-top:40px;
+  border:1px solid var(--border);
+  border-radius:2px;overflow:hidden;
+}
+.newsletter-form input{
+  flex:1;padding:18px 24px;
+  background:transparent;
+  color:var(--cream);
+  font-family:var(--ff-body);font-size:14px;
+  border:none;outline:none;
+}
+.newsletter-form input::placeholder{color:var(--muted)}
+.newsletter-form button{
+  padding:18px 32px;
+  background:var(--gold);color:var(--bg);
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.15em;text-transform:uppercase;
+  font-weight:700;white-space:nowrap;
+  transition:background .25s;
+}
+.newsletter-form button:hover{background:var(--gold-lt)}
+.newsletter-msg{
+  margin-top:16px;font-size:13px;
+  display:none;
+}
+.newsletter-msg.success{color:var(--gold);display:block}
+.newsletter-msg.error{color:#c94a4a;display:block}
+.nl-circle{
+  position:absolute;border-radius:50%;
+  border:1px solid var(--border);
+  animation:pulse 4s ease-in-out infinite;
+}
+.nl-circle:nth-child(1){width:500px;height:500px;top:50%;left:50%;transform:translate(-50%,-50%)}
+.nl-circle:nth-child(2){width:700px;height:700px;top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:.8s}
+.nl-circle:nth-child(3){width:900px;height:900px;top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:1.6s}
+@keyframes pulse{0%,100%{opacity:.15}50%{opacity:.06}}
+
+/* ═══ CONTACT ════════════════════════════════════════════════════════════= */
+.contact{
+  background:var(--surface);
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:80px;
+}
+.contact-info .sec-title{margin-bottom:24px}
+.contact-info p{color:var(--cream-dim);font-size:15px;line-height:1.8;margin-bottom:40px}
+.contact-links{display:flex;flex-direction:column;gap:20px}
+.contact-link{
+  display:flex;align-items:center;gap:16px;
+  font-family:var(--ff-mono);font-size:12px;
+  letter-spacing:.1em;color:var(--cream-dim);
+  transition:color .25s;
+}
+.contact-link:hover{color:var(--gold)}
+.contact-link-icon{
+  width:40px;height:40px;
+  border:1px solid var(--border);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;
+  transition:border-color .25s,background .25s;
+}
+.contact-link:hover .contact-link-icon{border-color:var(--gold);background:rgba(201,149,58,.1)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-group{margin-bottom:20px}
+.form-group label{
+  display:block;
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;
+}
+.form-group input,
+.form-group textarea,
+.form-group select{
+  width:100%;padding:14px 18px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:2px;
+  color:var(--cream);
+  font-family:var(--ff-body);font-size:14px;
+  outline:none;
+  transition:border-color .25s;
+}
+.form-group input:focus,
+.form-group textarea:focus{border-color:var(--gold)}
+.form-group textarea{resize:vertical;min-height:120px}
+.contact-msg{margin-top:16px;font-size:13px;display:none}
+.contact-msg.success{color:var(--gold);display:block}
+.contact-msg.error{color:#c94a4a;display:block}
+
+/* ═══ FOOTER ═════════════════════════════════════════════════════════════= */
+footer{
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  padding:80px 8% 40px;
+}
+.footer-top{
+  display:grid;grid-template-columns:2fr 1fr 1fr 1fr;
+  gap:60px;margin-bottom:60px;
+}
+.footer-logo{
+  font-family:var(--ff-display);font-size:32px;
+  letter-spacing:.08em;color:var(--cream);margin-bottom:16px;
+}
+.footer-logo span{color:var(--gold)}
+.footer-tagline{
+  color:var(--muted);font-size:13px;line-height:1.7;
+  max-width:260px;margin-bottom:28px;
+}
+.social-links{display:flex;gap:12px}
+.social-link{
+  width:40px;height:40px;
+  border:1px solid var(--border);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:14px;
+  transition:all .25s;
+}
+.social-link:hover{border-color:var(--gold);color:var(--gold);background:rgba(201,149,58,.08)}
+.footer-col h4{
+  font-family:var(--ff-mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:20px;
+}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+.footer-col ul a{
+  color:var(--muted);font-size:13px;
+  transition:color .25s;
+}
+.footer-col ul a:hover{color:var(--cream)}
+.footer-bottom{
+  border-top:1px solid var(--border);padding-top:32px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.footer-copy{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.1em;color:var(--muted);
+}
+.footer-legal{display:flex;gap:24px}
+.footer-legal a{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.08em;color:var(--muted);
+  transition:color .25s;
+}
+.footer-legal a:hover{color:var(--gold)}
+
+/* ═══ CART DRAWER ════════════════════════════════════════════════════════= */
+.cart-overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);
+  z-index:1000;opacity:0;pointer-events:none;
+  transition:opacity .4s;
+}
+.cart-overlay.open{opacity:1;pointer-events:all}
+.cart-drawer{
+  position:absolute;top:0;right:0;bottom:0;width:420px;
+  background:var(--surface);
+  border-left:1px solid var(--border);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .45s var(--ease-out);
+}
+.cart-overlay.open .cart-drawer{transform:translateX(0)}
+.cart-drawer-head{
+  padding:28px 32px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.cart-drawer-head h2{
+  font-family:var(--ff-display);font-size:24px;
+  letter-spacing:.06em;color:var(--cream);
+}
+.cart-close{
+  width:36px;height:36px;
+  border:1px solid var(--border);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:18px;
+  transition:all .25s;
+}
+.cart-close:hover{border-color:var(--gold);color:var(--gold)}
+.cart-body{flex:1;overflow-y:auto;padding:24px 32px}
+.cart-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:300px;color:var(--muted);text-align:center;gap:12px;
+}
+.cart-empty-icon{font-size:48px;opacity:.3;font-family:var(--ff-serif);font-style:italic}
+.cart-empty p{font-size:13px;font-family:var(--ff-mono);letter-spacing:.1em}
+.cart-item{
+  display:flex;gap:16px;padding:16px 0;
+  border-bottom:1px solid var(--border);
+}
+.cart-item-img{
+  width:80px;height:96px;flex-shrink:0;
+  background:var(--surface2);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-serif);font-style:italic;
+  color:var(--muted);font-size:11px;
+}
+.cart-item-info{flex:1}
+.cart-item-name{
+  font-family:var(--ff-serif);font-size:16px;
+  color:var(--cream);margin-bottom:4px;
+}
+.cart-item-price{
+  font-family:var(--ff-mono);font-size:13px;
+  color:var(--gold);
+}
+.cart-item-qty{
+  font-family:var(--ff-mono);font-size:11px;
+  color:var(--muted);margin-top:8px;
+}
+.cart-item-remove{
+  font-size:18px;color:var(--muted);
+  align-self:flex-start;
+  transition:color .2s;
+}
+.cart-item-remove:hover{color:#c94a4a}
+.cart-footer{
+  padding:24px 32px;
+  border-top:1px solid var(--border);
+}
+.cart-total{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:20px;
+}
+.cart-total span:first-child{
+  font-family:var(--ff-mono);font-size:11px;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+}
+.cart-total-amount{
+  font-family:var(--ff-display);font-size:28px;
+  color:var(--gold);
+}
+.cart-checkout{
+  display:block;width:100%;
+  padding:18px;
+  background:var(--gold);color:var(--bg);
+  font-family:var(--ff-mono);font-size:12px;
+  letter-spacing:.15em;text-transform:uppercase;
+  font-weight:700;border-radius:2px;
+  text-align:center;
+  transition:background .25s;
+}
+.cart-checkout:hover{background:var(--gold-lt)}
+
+/* ═══ TOAST ══════════════════════════════════════════════════════════════= */
+.toast{
+  position:fixed;bottom:32px;right:32px;
+  background:var(--surface);border:1px solid var(--gold);
+  padding:16px 24px;border-radius:2px;
+  font-family:var(--ff-mono);font-size:12px;
+  letter-spacing:.1em;color:var(--cream);
+  z-index:9999;
+  transform:translateY(80px);opacity:0;
+  transition:all .4s var(--ease-out);
+  max-width:300px;
+}
+.toast.show{transform:translateY(0);opacity:1}
+
+/* ═══ ANIMATIONS ══════════════════════════════════════════════════════════ */
+@keyframes fadeUp{
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ═══ MOBILE NAV ══════════════════════════════════════════════════════════ */
+@media(max-width:900px){
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .hero{grid-template-columns:1fr}
+  .hero-right{display:none}
+  .hero::after{display:none}
+  .collections-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto}
+  .col-card:nth-child(1){grid-row:auto;grid-column:1/3}
+  .col-card:nth-child(4){grid-column:1/3}
+  .about{grid-template-columns:1fr;gap:40px;padding:80px 6%}
+  .about-visual-badge{right:16px}
+  .products-grid{grid-template-columns:repeat(2,1fr)}
+  .testimonials-grid{grid-template-columns:1fr}
+  .contact{grid-template-columns:1fr;gap:48px;padding:80px 6%}
+  .footer-top{grid-template-columns:1fr 1fr;gap:40px}
+  .cart-drawer{width:100%}
+  section{padding:80px 6%}
+  .hero-left{padding:calc(var(--nav-h) + 60px) 6% 6%}
+  .form-row{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .products-grid{grid-template-columns:1fr}
+  .collections-grid{grid-template-columns:1fr}
+  .col-card:nth-child(1),.col-card:nth-child(4){grid-column:1}
+  .footer-top{grid-template-columns:1fr}
+  .about-stats{grid-template-columns:1fr;gap:24px}
+  .newsletter-form{flex-direction:column}
+  .newsletter-form button{padding:16px}
+}
+
+/* ═══ MOBILE NAV OPEN STATE ══════════════════════════════════════════════ */
+.mobile-nav{
+  position:fixed;inset:0;
+  background:var(--surface);z-index:800;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:40px;
+  transform:translateX(-100%);
+  transition:transform .5s var(--ease-out);
+}
+.mobile-nav.open{transform:translateX(0)}
+.mobile-nav a{
+  font-family:var(--ff-display);font-size:42px;
+  letter-spacing:.06em;color:var(--cream);
+  transition:color .25s;
+}
+.mobile-nav a:hover{color:var(--gold)}
+.hamburger.open span:nth-child(1){transform:translateY(6.5px) rotate(45deg)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg)}
+</style>
+</head>
+<body>
+
+<div class="mobile-nav" id="mobileNav">
+  <a href="#collections">Collections</a>
+  <a href="#products">Shop</a>
+  <a href="#about">About</a>
+  <a href="#contact">Contact</a>
+</div>
+
+<nav id="mainNav">
+  <div class="nav-logo">BEAR <span>TRIBLEAS</span></div>
+  <div class="nav-links">
+    <a href="#collections">Collections</a>
+    <a href="#products">Shop</a>
+    <a href="#about">Our Story</a>
+    <a href="#contact">Contact</a>
+  </div>
+  <div class="nav-right">
+    <button class="cart-btn" id="cartBtn">
+      BAG
+      <span class="cart-count" id="cartCount"><?= $cart_count ?></span>
+    </button>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<section class="hero" id="home">
+  <div class="hero-left">
+    <div class="hero-eyebrow">&#8212; New Season 2025</div>
+    <h1 class="hero-title">
+      WEAR THE<br>
+      <em>Wild</em><br>
+      WITHIN
+    </h1>
+    <p class="hero-sub">
+      Born from untamed wilderness. Crafted for those who move between worlds — 
+      where raw nature meets refined street culture.
+    </p>
+    <div class="hero-ctas">
+      <a href="#products" class="btn-primary">Shop Now &rarr;</a>
+      <a href="#collections" class="btn-outline">Explore Collections</a>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="hero-img-grid">
+      <div class="hero-img-cell">
+        <svg class="hero-bear-svg" viewBox="0 0 400 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M200 100 C140 100 90 140 80 190 C70 210 75 235 80 250 C60 255 40 270 35 295 C30 320 45 345 65 355 C70 380 85 400 110 410 L290 410 C315 400 330 380 335 355 C355 345 370 320 365 295 C360 270 340 255 320 250 C325 235 330 210 320 190 C310 140 260 100 200 100Z" fill="currentColor"/>
+          <circle cx="150" cy="80" r="35" fill="currentColor"/>
+          <circle cx="250" cy="80" r="35" fill="currentColor"/>
+          <circle cx="167" cy="195" r="12" fill="#0b0a09"/>
+          <circle cx="233" cy="195" r="12" fill="#0b0a09"/>
+          <ellipse cx="200" cy="230" rx="22" ry="15" fill="#0b0a09"/>
+        </svg>
+        <div class="img-placeholder">Hero Lookbook</div>
+      </div>
+      <div class="hero-img-cell"><div class="img-placeholder">Bear Claw Hoodie</div></div>
+      <div class="hero-img-cell"><div class="img-placeholder">Trail Jacket</div></div>
+    </div>
+  </div>
+
+  <div class="hero-scroll">
+    <div class="hero-scroll-line"></div>
+    Scroll to Explore
+  </div>
+</section>
+
+<div class="ticker">
+  <div class="ticker-track" id="tickerTrack">
+    <div class="ticker-item">New Collection Drop<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Bear Tribleas SS25<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Raw &bull; Refined &bull; Wild<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Free Shipping Over ₹2999<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Premium Streetwear India<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Bear Tribleas SS25<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Raw &bull; Refined &bull; Wild<span class="ticker-dot"></span></div>
+    <div class="ticker-item">New Collection Drop<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Free Shipping Over ₹2999<span class="ticker-dot"></span></div>
+    <div class="ticker-item">Premium Streetwear India<span class="ticker-dot"></span></div>
+  </div>
+</div>
+
+<section class="collections" id="collections">
+  <div class="collections-header reveal">
+    <div>
+      <div class="sec-label">— Our Drops</div>
+      <h2 class="sec-title">SHOP BY <em>Collection</em></h2>
+    </div>
+    <a href="#products" class="btn-outline">View All &rarr;</a>
+  </div>
+
+  <div class="collections-grid reveal">
+    <div class="col-card">
+      <div class="col-card-bg"></div>
+      <div class="col-card-texture"></div>
+      <div class="col-card-overlay"></div>
+      <div class="col-card-watermark">&#9733;</div>
+      <div class="col-card-content">
+        <div class="col-card-tag">— Flagship</div>
+        <div class="col-card-title">THE APEX<br>SERIES</div>
+      </div>
+      <div class="col-card-arrow">&rarr;</div>
+    </div>
+    <div class="col-card">
+      <div class="col-card-bg"></div>
+      <div class="col-card-texture"></div>
+      <div class="col-card-overlay"></div>
+      <div class="col-card-content">
+        <div class="col-card-tag">— SS25</div>
+        <div class="col-card-title">FOREST<br>BORN</div>
+      </div>
+      <div class="col-card-arrow">&rarr;</div>
+    </div>
+    <div class="col-card">
+      <div class="col-card-bg"></div>
+      <div class="col-card-texture"></div>
+      <div class="col-card-overlay"></div>
+      <div class="col-card-content">
+        <div class="col-card-tag">— Limited</div>
+        <div class="col-card-title">NIGHT<br>TRAIL</div>
+      </div>
+      <div class="col-card-arrow">&rarr;</div>
+    </div>
+    <div class="col-card">
+      <div class="col-card-bg"></div>
+      <div class="col-card-texture"></div>
+      <div class="col-card-overlay"></div>
+      <div class="col-card-content">
+        <div class="col-card-tag">— Core</div>
+        <div class="col-card-title">EVERYDAY ESSENTIALS — RAW CLASSICS</div>
+      </div>
+      <div class="col-card-arrow">&rarr;</div>
+    </div>
+  </div>
+</section>
+
+<section class="products" id="products">
+  <div class="products-header reveal">
+    <div>
+      <div class="sec-label">— The Range</div>
+      <h2 class="sec-title">SHOP THE <em>Drop</em></h2>
+    </div>
+    <div class="filter-tabs">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="tops">Tops</button>
+      <button class="filter-tab" data-filter="outerwear">Outerwear</button>
+      <button class="filter-tab" data-filter="bottoms">Bottoms</button>
+    </div>
+  </div>
+
+  <div class="products-grid" id="productsGrid">
+
+    <div class="product-card reveal" data-category="tops" style="transition-delay:.05s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Bear<br>Claw</div>
+        <span class="product-badge new">New</span>
+        <button class="product-quick-add"
+          data-id="1" data-name="Bear Claw Hoodie" data-price="3499" data-img="hoodie">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Bear Claw Hoodie</div>
+        <div class="product-meta">
+          <div class="product-price">₹3,499</div>
+          <div class="product-sizes">
+            <div class="size-dot">S</div>
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+            <div class="size-dot">XL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-card reveal" data-category="outerwear" style="transition-delay:.1s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Trail<br>Jacket</div>
+        <span class="product-badge">Flagship</span>
+        <button class="product-quick-add"
+          data-id="2" data-name="Tribleas Trail Jacket" data-price="6999" data-img="jacket">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Tribleas Trail Jacket</div>
+        <div class="product-meta">
+          <div class="product-price">₹6,999</div>
+          <div class="product-sizes">
+            <div class="size-dot">S</div>
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-card reveal" data-category="tops" style="transition-delay:.15s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Wild<br>Tee</div>
+        <span class="product-badge sale">Sale</span>
+        <button class="product-quick-add"
+          data-id="3" data-name="Wilderness Oversized Tee" data-price="1799" data-img="tee">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Wilderness Oversized Tee</div>
+        <div class="product-meta">
+          <div class="product-price">₹1,799 <span class="original">₹2,299</span></div>
+          <div class="product-sizes">
+            <div class="size-dot">S</div>
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+            <div class="size-dot">XL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-card reveal" data-category="bottoms" style="transition-delay:.2s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Forest<br>Joggers</div>
+        <button class="product-quick-add"
+          data-id="4" data-name="Forest Camo Joggers" data-price="3199" data-img="joggers">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Forest Camo Joggers</div>
+        <div class="product-meta">
+          <div class="product-price">₹3,199</div>
+          <div class="product-sizes">
+            <div class="size-dot">S</div>
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+            <div class="size-dot">XL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-card reveal" data-category="outerwear" style="transition-delay:.25s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Peak<br>Vest</div>
+        <span class="product-badge new">New</span>
+        <button class="product-quick-add"
+          data-id="5" data-name="Peak Performance Vest" data-price="4499" data-img="vest">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Peak Performance Vest</div>
+        <div class="product-meta">
+          <div class="product-price">₹4,499</div>
+          <div class="product-sizes">
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+            <div class="size-dot">XL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-card reveal" data-category="tops" style="transition-delay:.3s">
+      <div class="product-img">
+        <div class="product-img-bg"></div>
+        <div class="product-icon">Arctic<br>Fleece</div>
+        <span class="product-badge">Limited</span>
+        <button class="product-quick-add"
+          data-id="6" data-name="Arctic Fleece Pullover" data-price="5299" data-img="fleece">
+          + Add to Bag
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-name">Arctic Fleece Pullover</div>
+        <div class="product-meta">
+          <div class="product-price">₹5,299</div>
+          <div class="product-sizes">
+            <div class="size-dot">S</div>
+            <div class="size-dot">M</div>
+            <div class="size-dot">L</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="about" id="about">
+  <div class="about-visual reveal">
+    <div class="about-visual-inner"></div>
+    <div class="about-visual-badge">
+      <div class="year">&#127748;</div>
+      <div class="label">Est. 2019</div>
+    </div>
+    <div class="about-visual-line"></div>
+  </div>
+  <div class="about-copy reveal" style="transition-delay:.15s">
+    <div class="sec-label">— Our Story</div>
+    <h2 class="sec-title">WHERE THE<br><em>Wild</em> LEADS</h2>
+    <p>
+      <strong>Bear Tribleas</strong> was born on a mountain trail in the pre-dawn dark, 
+      where the line between comfort and the raw world blurs. We make clothing for those 
+      who refuse to choose between civilisation and the wilderness.
+    </p>
+    <p>
+      Every stitch is an act of defiance against the ordinary. Our fabrics are sourced from 
+      sustainable mills, our silhouettes shaped by movement — whether that's a forest trail 
+      or a city block at 3am.
+    </p>
+    <p>
+      <strong>Tribleas</strong> is more than a word. It's a call — to the tribe that lives 
+      unfiltered, that sleeps under open sky and wears their stories on their backs.
+    </p>
+    <div class="about-stats">
+      <div class="about-stat">
+        <div class="num">6+</div>
+        <div class="label">Years Wild</div>
+      </div>
+      <div class="about-stat">
+        <div class="num">40K</div>
+        <div class="label">Pack Members</div>
+      </div>
+      <div class="about-stat">
+        <div class="num">100%</div>
+        <div class="label">Sustainable</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="testimonials" id="reviews">
+  <div class="reveal">
+    <div class="sec-label">— The Pack Speaks</div>
+    <h2 class="sec-title">WORDS FROM THE <em>Wild</em></h2>
+  </div>
+  <div class="testimonials-grid">
+    <div class="testi-card reveal" style="transition-delay:.05s">
+      <div class="testi-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+      <div class="testi-text">
+        "The Trail Jacket changed everything about how I dress. It's not just a jacket — 
+        it's an identity. Wear it in Shimla, wear it in Delhi. Fits both worlds."
+      </div>
+      <div class="testi-author">Arjun M. <span>— Chandigarh</span></div>
+    </div>
+    <div class="testi-card reveal" style="transition-delay:.1s">
+      <div class="testi-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+      <div class="testi-text">
+        "I've never felt a fabric this quality at this price. The Bear Claw Hoodie is 
+        permanently mine now. My flatmates keep trying to borrow it. Not a chance."
+      </div>
+      <div class="testi-author">Priya S. <span>— Mumbai</span></div>
+    </div>
+    <div class="testi-card reveal" style="transition-delay:.15s">
+      <div class="testi-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+      <div class="testi-text">
+        "Finally a brand that gets it. Raw enough for the mountains, refined enough 
+        for the streets. Bear Tribleas is the only thing I've been ordering this year."
+      </div>
+      <div class="testi-author">Rahul D. <span>— Bangalore</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="newsletter">
+  <div class="nl-circle"></div>
+  <div class="nl-circle"></div>
+  <div class="nl-circle"></div>
+  <div class="newsletter-inner reveal">
+    <div class="sec-label">— Join the Pack</div>
+    <h2 class="sec-title">FIRST ACCESS.<br><em>Always</em></h2>
+    <p style="margin-top:16px;color:var(--cream-dim);font-size:14px">
+      Get early drops, exclusive member pricing, and raw dispatches from the Bear Tribleas team.
+    </p>
+    <form class="newsletter-form" id="newsletterForm">
+      <input type="email" name="email" placeholder="your@email.com" required>
+      <button type="submit">Join</button>
+    </form>
+    <div class="newsletter-msg" id="newsletterMsg"></div>
+  </div>
+</section>
+
+<section class="contact" id="contact">
+  <div class="contact-info reveal">
+    <div class="sec-label">— Get in Touch</div>
+    <h2 class="sec-title">LET'S <em>Talk</em></h2>
+    <p>
+      Questions about sizing, custom orders, wholesale, or just want to share your 
+      Bear Tribleas story — we're here for all of it.
+    </p>
+    <div class="contact-links">
+      <a href="mailto:hello@beartribleas.com" class="contact-link">
+        <div class="contact-link-icon">&#9993;</div>
+        hello@beartribleas.com
+      </a>
+      <a href="tel:+911234567890" class="contact-link">
+        <div class="contact-link-icon">&#9742;</div>
+        +91 98765 43210
+      </a>
+      <a href="#" class="contact-link">
+        <div class="contact-link-icon">&#9737;</div>
+        Chandigarh, India &amp; Ships Nationwide
+      </a>
+    </div>
+  </div>
+  <div class="contact-form reveal" style="transition-delay:.1s">
+    <form id="contactForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" name="name" placeholder="Your name" required>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" placeholder="your@email.com" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Subject</label>
+        <select name="subject">
+          <option value="">Select a topic</option>
+          <option>Order / Shipping</option>
+          <option>Sizing Help</option>
+          <option>Wholesale Inquiry</option>
+          <option>Custom Order</option>
+          <option>General</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea name="message" placeholder="Tell us what's on your mind..." required></textarea>
+      </div>
+      <button type="submit" class="btn-primary" style="width:100%;justify-content:center">
+        Send Message &rarr;
+      </button>
+      <div class="contact-msg" id="contactMsg"></div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <div class="footer-logo">BEAR <span>TRIBLEAS</span></div>
+      <div class="footer-tagline">
+        Raw. Refined. Wild. Clothing for those who move between worlds — 
+        where wilderness meets street culture.
+      </div>
+      <div class="social-links">
+        <a href="#" class="social-link" aria-label="Instagram">&#9670;</a>
+        <a href="#" class="social-link" aria-label="Twitter">&#9671;</a>
+        <a href="#" class="social-link" aria-label="Facebook">&#9672;</a>
+        <a href="#" class="social-link" aria-label="Pinterest">&#9673;</a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Shop</h4>
+      <ul>
+        <li><a href="#products">New Arrivals</a></li>
+        <li><a href="#collections">Collections</a></li>
+        <li><a href="#products">Hoodies</a></li>
+        <li><a href="#products">Jackets</a></li>
+        <li><a href="#products">Tees</a></li>
+        <li><a href="#products">Bottoms</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Help</h4>
+      <ul>
+        <li><a href="#">Size Guide</a></li>
+        <li><a href="#">Shipping Info</a></li>
+        <li><a href="#">Returns</a></li>
+        <li><a href="#">Track Order</a></li>
+        <li><a href="#contact">Contact Us</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>About</h4>
+      <ul>
+        <li><a href="#about">Our Story</a></li>
+        <li><a href="#">Sustainability</a></li>
+        <li><a href="#">Wholesale</a></li>
+        <li><a href="#">Press</a></li>
+        <li><a href="#">Careers</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">
+      &copy; <?= $year ?> Bear Tribleas. All rights reserved. Made wild in India.
+    </div>
+    <div class="footer-legal">
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Use</a>
+      <a href="#">Cookie Policy</a>
+    </div>
+  </div>
+</footer>
+
+<div class="cart-overlay" id="cartOverlay">
+  <div class="cart-drawer">
+    <div class="cart-drawer-head">
+      <h2>YOUR BAG</h2>
+      <button class="cart-close" id="cartClose">&#10005;</button>
+    </div>
+    <div class="cart-body" id="cartBody">
+      <div class="cart-empty">
+        <div class="cart-empty-icon">&#9651;</div>
+        <p>Your bag is empty<br>Add something wild.</p>
+      </div>
+    </div>
+    <div class="cart-footer" id="cartFooter" style="display:none">
+      <div class="cart-total">
+        <span>Total</span>
+        <span class="cart-total-amount" id="cartTotal">₹0</span>
+      </div>
+      <a href="#" class="cart-checkout">Proceed to Checkout &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── NAV SCROLL ─────────────────────────────────────────────────────────────
+const nav = document.getElementById('mainNav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 60);
+}, {passive:true});
+
+// ─── HAMBURGER ───────────────────────────────────────────────────────────────
+const hamburger = document.getElementById('hamburger');
+const mobileNav = document.getElementById('mobileNav');
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('open');
+  mobileNav.classList.toggle('open');
+});
+mobileNav.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+  hamburger.classList.remove('open');
+  mobileNav.classList.remove('open');
+}));
+
+// ─── REVEAL ON SCROLL ────────────────────────────────────────────────────────
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }});
+}, {threshold:0.1, rootMargin:'0px 0px -60px 0px'});
+revealEls.forEach(el => io.observe(el));
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─── CART STATE ───────────────────────────────────────────────────────────────
+let cartData = {};
+
+function rupee(n) {
+  return '₹' + Number(n).toLocaleString('en-IN');
+}
+
+function renderCart() {
+  const body  = document.getElementById('cartBody');
+  const foot  = document.getElementById('cartFooter');
+  const count = document.getElementById('cartCount');
+  const total = document.getElementById('cartTotal');
+  const items = Object.entries(cartData);
+
+  count.textContent = items.reduce((s,[,v]) => s + v.qty, 0);
+
+  if (!items.length) {
+    body.innerHTML = '<div class="cart-empty"><div class="cart-empty-icon">&#9651;</div><p>Your bag is empty<br>Add something wild.</p></div>';
+    foot.style.display = 'none';
+    return;
+  }
+
+  let html = '';
+  let grandTotal = 0;
+  items.forEach(([id, item]) => {
+    const line = item.price * item.qty;
+    grandTotal += line;
+    html += `<div class="cart-item">
+      <div class="cart-item-img">${item.img}</div>
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.name}</div>
+        <div class="cart-item-price">${rupee(item.price)}</div>
+        <div class="cart-item-qty">Qty: ${item.qty}</div>
+      </div>
+      <button class="cart-item-remove" data-id="${id}">&#10005;</button>
+    </div>`;
+  });
+  body.innerHTML = html;
+  total.textContent = rupee(grandTotal);
+  foot.style.display = '';
+
+  body.querySelectorAll('.cart-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => removeFromCart(btn.dataset.id));
+  });
+}
+
+function openCart() {
+  document.getElementById('cartOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeCart() {
+  document.getElementById('cartOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('cartBtn').addEventListener('click', openCart);
+document.getElementById('cartClose').addEventListener('click', closeCart);
+document.getElementById('cartOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCart();
+});
+
+// ─── ADD TO CART ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.product-quick-add').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const {id, name, price, img} = btn.dataset;
+    const fd = new FormData();
+    fd.append('action','add_to_cart');
+    fd.append('product_id', id);
+    fd.append('product_name', name);
+    fd.append('product_price', price);
+    fd.append('product_img', img);
+
+    try {
+      const r = await fetch(window.location.href, {method:'POST', body:fd});
+      const d = await r.json();
+      if (d.ok) {
+        if (!cartData[id]) cartData[id] = {name, price:parseFloat(price), img, qty:0};
+        cartData[id].qty++;
+        renderCart();
+        showToast('Added to bag — ' + name);
+      }
+    } catch {
+      // Offline fallback (no PHP server): update local state
+      if (!cartData[id]) cartData[id] = {name, price:parseFloat(price), img, qty:0};
+      cartData[id].qty++;
+      renderCart();
+      showToast('Added to bag — ' + name);
+    }
+  });
+});
+
+// ─── REMOVE FROM CART ────────────────────────────────────────────────────────
+async function removeFromCart(id) {
+  const fd = new FormData();
+  fd.append('action','remove_from_cart');
+  fd.append('product_id', id);
+  try {
+    const r = await fetch(window.location.href, {method:'POST', body:fd});
+    const d = await r.json();
+    delete cartData[id];
+    renderCart();
+  } catch {
+    delete cartData[id];
+    renderCart();
+  }
+}
+
+// ─── FILTER TABS ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.filter-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const filter = tab.dataset.filter;
+    document.querySelectorAll('.product-card').forEach(card => {
+      const match = filter === 'all' || card.dataset.category === filter;
+      card.style.display = match ? '' : 'none';
+    });
+  });
+});
+
+// ─── NEWSLETTER ───────────────────────────────────────────────────────────────
+document.getElementById('newsletterForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  fd.append('action','newsletter');
+  const msg = document.getElementById('newsletterMsg');
+  try {
+    const r = await fetch(window.location.href, {method:'POST', body:fd});
+    const d = await r.json();
+    msg.className = 'newsletter-msg ' + d.status;
+    msg.textContent = d.msg;
+  } catch {
+    msg.className = 'newsletter-msg success';
+    msg.textContent = 'Welcome to the pack!';
+  }
+  e.target.reset();
+});
+
+// ─── CONTACT FORM ─────────────────────────────────────────────────────────────
+document.getElementById('contactForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  fd.append('action','contact');
+  const msg = document.getElementById('contactMsg');
+  try {
+    const r = await fetch(window.location.href, {method:'POST', body:fd});
+    const d = await r.json();
+    msg.className = 'contact-msg ' + d.status;
+    msg.textContent = d.msg;
+  } catch {
+    msg.className = 'contact-msg success';
+    msg.textContent = "Message received. We'll be in touch.";
+  }
+  if(msg.classList.contains('success')) e.target.reset();
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+renderCart();
+</script>
+</body>
+</html>
