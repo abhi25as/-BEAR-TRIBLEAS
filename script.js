@@ -1,26 +1,33 @@
 /* ═══════════════════════════════════════════════════════════════
-   BEAR TRIBLEAS — script.js  (unified, all pages)
-   Handles: Cart Functionality (Add, Remove, Qty), Drawers, 
-            Filters, and Interactive UI Elements.
+   BEAR TRIBLEAS — script.js (FIXED & BALANCED)
 ═══════════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────────────────────────────────────────
-   SHARED CART STORAGE  (localStorage key: bt_cart)
-───────────────────────────────────────────────────────────────*/
+// A permanent storage handler that refuses to load junk
 function getCart() { 
-    // This strictly filters out "ghost" items with 0 or negative quantities
-    const cart = JSON.parse(localStorage.getItem('bt_cart') || '[]');
-    return cart.filter(item => item.qty > 0);
+    try {
+        const raw = localStorage.getItem('bt_cart');
+        if (!raw) return []; // Default to empty
+        
+        const cart = JSON.parse(raw);
+        if (!Array.isArray(cart)) return []; // If data is not an array, discard
+        
+        // Final sanity check: filter out items that don't have a valid name/price/qty
+        return cart.filter(item => 
+            item && 
+            typeof item.name === 'string' && 
+            item.qty > 0 && 
+            !isNaN(item.qty)
+        );
+    } catch(e) { 
+        return []; // If anything crashes, return empty instead of breaking the site
+    }
 }
-
 function saveCart(c) { 
-    // Filter out any accidental 0-quantity items before saving
-    const cleanedCart = c.filter(item => item.qty > 0);
+    const cleanedCart = c.filter(item => item && item.qty > 0);
     localStorage.setItem('bt_cart', JSON.stringify(cleanedCart)); 
 }
 
 function priceToNum(str) { 
-    // Handles cases where price might already be a number
     if (typeof str === 'number') return str;
     return parseInt((str || '0').replace(/[₹,\s]/g, ''), 10) || 0; 
 }
@@ -28,29 +35,96 @@ function priceToNum(str) {
 function numToPrice(n) { 
     return '₹' + n.toLocaleString('en-IN'); 
 }
-// Ensure this is exactly what you have in your script.js
-function getCart() { 
-    const cart = JSON.parse(localStorage.getItem('bt_cart') || '[]');
-    return cart.filter(item => item.qty > 0); // This line is the "Ghost Buster"
-}
-/* ─────────────────────────────────────────────────────────────
-   CART ACTIONS (Add, Remove, Update Qty)
-───────────────────────────────────────────────────────────────*/
-
-// Add generic product to cart
+// Add generic product to cart - The Permanent Fix
 window.addToCart = function(id, name, price, img) {
+  // GATEKEEPER: Prevent auto-adding of empty or invalid items
+  if (!name || name === 'undefined' || name === '') {
+      console.warn("Blocked invalid item add attempt.");
+      return;
+  }
+  
   const key  = String(id);
   const cart = getCart();
   const ex   = cart.find(x => x.id === key);
-  if (ex) ex.qty++;
-  else cart.push({ id: key, name, price: numToPrice(price), qty: 1, img: img || '' });
+  
+  if (ex) {
+      ex.qty++;
+  } else {
+      cart.push({ id: key, name, price: numToPrice(price), qty: 1, img: img || '' });
+  }
+  
   saveCart(cart);
   _refreshAllBadges();
   _renderLegacyDrawer();
   _openLegacyDrawer();
 };
+// ─── CART ACTIONS ──────────────────────────────────────────
+window.updateCartItem = function(id, delta) {
+    let cart = getCart();
+    let idx = cart.findIndex(x => x.id === id);
+    if (idx > -1) {
+        cart[idx].qty += delta;
+        saveCart(cart);
+        _refreshAllBadges();
+        _renderNewDrawer();    
+        _renderLegacyDrawer(); 
+        _renderCratePage();    
+    }
+};
 
-// Add product variant (reads selected size/price from page)
+ window.removeCartItem = function(id) {
+    let cart = getCart();
+    // 1. Remove the specific item
+    cart = cart.filter(x => x.id !== id);
+    
+    // 2. If the cart is now empty, wipe localStorage to ensure 0 items
+    if (cart.length === 0) {
+        localStorage.removeItem('bt_cart');
+    } else {
+        saveCart(cart);
+    }
+    
+    // 3. Force a full UI refresh
+    _refreshAllBadges();
+    _renderNewDrawer();
+    _renderLegacyDrawer();
+    _renderCratePage();
+};
+window.toggleCart = function() {
+    const drawer  = document.getElementById('cartDrawer');
+    const overlay = document.getElementById('cartOverlay');
+    if (drawer) {
+        drawer.classList.toggle('open');
+        overlay?.classList.toggle('show');
+    }
+};
+
+// ─── INITIALIZATION ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Cursor Logic
+    const dot = document.getElementById("cursor-dot");
+    const ring = document.getElementById("cursor-ring");
+    if (dot && ring) {
+        let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
+        document.addEventListener("mousemove", (e) => {
+            mouseX = e.clientX; mouseY = e.clientY;
+            dot.style.left = mouseX + "px"; dot.style.top = mouseY + "px";
+        });
+        function animate() {
+            ringX += (mouseX - ringX) * 0.15;
+            ringY += (mouseY - ringY) * 0.15;
+            ring.style.left = ringX + "px"; ring.style.top = ringY + "px";
+            requestAnimationFrame(animate);
+        }
+        animate();
+    }
+
+    // 2. Render UI
+    if (typeof _refreshAllBadges === 'function') _refreshAllBadges();
+    if (typeof _renderLegacyDrawer === 'function') _renderLegacyDrawer();
+    if (typeof _renderNewDrawer === 'function') _renderNewDrawer();
+    if (typeof _renderCratePage === 'function') _renderCratePage();
+});
 window.addVariantToCart = function(id, productName, imgUrl) {
   const sel  = document.getElementById('variant-' + id);
   const qtyI = document.getElementById('qty-' + id);
@@ -71,40 +145,26 @@ window.addVariantToCart = function(id, productName, imgUrl) {
   _openLegacyDrawer();
 };
 
-// Increment or Decrement Item Quantity
-// Increment or Decrement Item Quantity
 window.updateCartItem = function(id, delta) {
-    if (cartData[id]) {
-        cartData[id].qty += delta;
-        
-        // If qty reaches 0, delete it from the object entirely
-        if (cartData[id].qty <= 0) {
-            delete cartData[id];
+    let cart = getCart();
+    let idx = cart.findIndex(x => x.id === id);
+    if (idx > -1) {
+        cart[idx].qty += delta;
+        if (cart[idx].qty <= 0) {
+            cart.splice(idx, 1);
         }
-        
-        saveCart(Object.values(cartData)); // Save the cleaned list
+        saveCart(cart);
         _refreshAllBadges();
-        _renderNewDrawer();    // Refresh UI
+        _renderNewDrawer();    
+        _renderLegacyDrawer(); 
+        _renderCratePage();    
     }
 };
 
-// Remove Item Entirely
-window.removeCartItem = function(id) {
-    if (cartData[id]) {
-        delete cartData[id]; // Delete the key from the object
-        saveCart(Object.values(cartData)); // Save the cleaned list
-        _refreshAllBadges();
-        _renderNewDrawer();
-    }
-};
-// Fallback for older buttons
+ 
 window.removeFromCart = window.removeCartItem;
 
-/* ─────────────────────────────────────────────────────────────
-   DRAWER TOGGLES & MODALS
-───────────────────────────────────────────────────────────────*/
-
-// Light Theme Drawer Toggle
+// ─── UI TOGGLES & MODALS ─────────────────────────────────────
 window.toggleCart = function() {
   const drawer  = document.getElementById('cartDrawer');
   const overlay = document.getElementById('cartOverlay');
@@ -116,7 +176,6 @@ window.toggleCart = function() {
   else { document.body.style.overflow = ''; }
 };
 
-// Checkout routing / Modal Opening
 window.processCheckout = function() {
   if (!getCart().length) return;
   window.location.href = 'crate.php';
@@ -158,10 +217,7 @@ window.togglePayment = function(type) {
   document.getElementById('tab-card')?.classList.toggle('active', type === 'card');
 };
 
-/* ─────────────────────────────────────────────────────────────
-   RENDER FUNCTIONS
-───────────────────────────────────────────────────────────────*/
-
+// ─── RENDER FUNCTIONS ────────────────────────────────────────
 function _refreshAllBadges() {
   const cart  = getCart();
   const count = cart.reduce((s, x) => s + (x.qty || 1), 0);
@@ -170,24 +226,16 @@ function _refreshAllBadges() {
   if (nb) { nb.textContent = count; nb.classList.toggle('show', count > 0); }
 }
 
-// 1. Renders the Dark Theme Drawer (index.php)
 function _renderNewDrawer() {
-  const body    = document.getElementById('cart-body');
-  const totalEl = document.getElementById('cart-total');
-  if (!body) return;
+  const body = document.getElementById('cart-body');
+  const cart = getCart(); // Now guaranteed to be a clean array
 
-  const items = Object.entries(cartData); // This only gets items currently in the object
-
-  if (items.length === 0) {
-    body.innerHTML = `
-      <div class="cart-empty-state">
-        <p>Your bag is empty</p>
-      </div>`;
-    if (totalEl) totalEl.textContent = '₹0';
+  if (cart.length === 0 || !body) {
+    if (body) body.innerHTML = '<p>Your bag is empty.</p>';
     return;
   }
-  // ... rest of your map function
-}
+  // ... rest of your render logic
+
 
   let total = 0;
   body.innerHTML = cart.map((item) => {
@@ -208,54 +256,14 @@ function _renderNewDrawer() {
           <span style="font-family:'Space Mono', monospace; font-size:13px; color:#f0e9dd; min-width:16px; text-align:center;">${qty}</span>
           <button onclick="window.updateCartItem('${item.id}', 1)" style="width:26px;height:26px;border:1px solid rgba(201,168,76,.4);background:transparent;color:#c9a84c;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
         </div>
-
       </div>
       <button onclick="window.removeCartItem('${item.id}')" style="background:none; border:none; color:#7a6f63; font-size:20px; cursor:pointer; align-self:flex-start; padding-left:10px;">✕</button>
     </div>`;
   }).join('');
 
   if (totalEl) totalEl.textContent = numToPrice(total);
-/* In script.js */
-const dot  = document.getElementById('cursor-dot');
-const ring = document.getElementById('cursor-ring');
-
-if (dot && ring) {
-  let mx = innerWidth/2, my = innerHeight/2, rx = mx, ry = my;
-  
-  document.addEventListener("DOMContentLoaded", () => {
-
-    const dot = document.getElementById("cursor-dot");
-    const ring = document.getElementById("cursor-ring");
-
-    if (!dot || !ring) return;
-
-    let mouseX = 0;
-    let mouseY = 0;
-    let ringX = 0;
-    let ringY = 0;
-
-    document.addEventListener("mousemove", (e) => {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-
-        dot.style.left = mouseX + "px";
-        dot.style.top = mouseY + "px";
-    });
-
-    function animate() {
-        ringX += (mouseX - ringX) * 0.15;
-        ringY += (mouseY - ringY) * 0.15;
-
-        ring.style.left = ringX + "px";
-        ring.style.top = ringY + "px";
-
-        requestAnimationFrame(animate);
-    }
-
-    animate();
-});
 }
-// 2. Renders the Light Theme Drawer (Category Pages)
+
 function _renderLegacyDrawer() {
   const container = document.getElementById('cartItemsContainer');
   const totalEl   = document.getElementById('cartTotal');
@@ -285,7 +293,6 @@ function _renderLegacyDrawer() {
           <span style="font-size:14px; font-weight:bold; min-width:16px; text-align:center;">${qty}</span>
           <button onclick="window.updateCartItem('${item.id}', 1)" style="width:26px;height:26px;border:1px solid #d1ccc5;background:transparent;border-radius:4px;cursor:pointer;font-weight:bold;">+</button>
         </div>
-
         <button onclick="window.removeCartItem('${item.id}')" style="background:none;border:none;color:#d9534f;cursor:pointer;font-size:11px;margin-top:12px;font-weight:700;letter-spacing:.5px;">REMOVE</button>
       </div>
     </div>`;
@@ -293,14 +300,16 @@ function _renderLegacyDrawer() {
   if (totalEl) totalEl.textContent = numToPrice(total) + '.00';
 }
 
-// 3. Renders the Main Crate Page (crate.php)
+// ... (Keep all your existing functions above this)
+
 function _renderCratePage() {
   const crateContainer = document.getElementById('crate-container');
   const crateTotal     = document.getElementById('crate-total');
   const crateSub       = document.getElementById('crate-subtotal');
   const crateCount     = document.getElementById('crate-count');
   const summaryBox     = document.getElementById('crate-summary');
-  if (!crateContainer) return;
+  
+  if (!crateContainer) return; // Silent exit if not on crate page
   
   const cart = getCart();
   if (!cart.length) {
@@ -321,7 +330,6 @@ function _renderCratePage() {
       <div style="flex:1;">
         <h3 style="font-size:1.1rem;font-weight:800;color:#2C352D;margin-bottom:8px;">${item.name}</h3>
         <p style="font-size:15px;color:#555;margin-bottom:12px;">${item.price} × ${qty} = <strong style="color:#2C352D;font-size:1.1rem;">${numToPrice(price*qty)}</strong></p>
-
         <div style="display:flex; align-items:center; gap:16px;">
           <div style="display:flex; align-items:center; gap:12px;">
             <button onclick="window.updateCartItem('${item.id}', -1)" style="width:30px;height:30px;border:1px solid #d1ccc5;background:#fff;border-radius:4px;cursor:pointer;font-weight:bold;">−</button>
@@ -341,6 +349,14 @@ function _renderCratePage() {
   if (summaryBox) summaryBox.style.display = 'block';
 }
 
+// ─── FINAL INITIALIZATION ────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  _refreshAllBadges();
+  _renderLegacyDrawer();
+  _renderNewDrawer();
+  _renderCratePage();
+  // ... (keep all your other event listeners below here)
+});
 function _openLegacyDrawer() {
   const drawer  = document.getElementById('cartDrawer');
   const overlay = document.getElementById('cartOverlay');
@@ -368,17 +384,47 @@ function _closeNewDrawer() {
   document.body.style.overflow = '';
 }
 
-
 /* ═══════════════════════════════════════════════════════════
    DOM READY — Wires up UI behaviours
 ═══════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+
+  // --- 1. PASTE THIS CURSOR LOGIC BACK IN ---
+  const dot = document.getElementById("cursor-dot");
+  const ring = document.getElementById("cursor-ring");
+
+  if (dot && ring) {
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let ringX = mouseX;
+    let ringY = mouseY;
+
+    document.addEventListener("mousemove", (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        dot.style.left = mouseX + "px";
+        dot.style.top = mouseY + "px";
+    });
+
+    function animate() {
+        ringX += (mouseX - ringX) * 0.15;
+        ringY += (mouseY - ringY) * 0.15;
+        ring.style.left = ringX + "px";
+        ring.style.top = ringY + "px";
+        requestAnimationFrame(animate);
+    }
+    animate();
+  }
+  // --- END OF CURSOR LOGIC ---
 
   // Render Carts globally on load
   _refreshAllBadges();
   _renderLegacyDrawer();
   _renderNewDrawer();
   _renderCratePage();
+
+  // ... keep the rest of your listeners here (Sticky Nav, Hamburger, etc)
+});
 
   // Dark Theme Drawer buttons
   document.querySelectorAll('[data-cart-open]').forEach(b => b.addEventListener('click', () => {
@@ -403,11 +449,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const name  = btn.dataset.name;
     const price = btn.dataset.price;
     const img   = btn.dataset.img || ''; 
+    
+    // Safety check - ignore corrupted clicks
+    if (!name || name === 'undefined') return;
+
     const key   = name + (btn.dataset.variant || '');
     const c     = getCart();
     const ex    = c.find(x => x.id === key);
     if (ex) ex.qty++;
     else c.push({ id: key, name, price, qty: 1, img }); 
+    
     saveCart(c);
     _refreshAllBadges();
     _renderNewDrawer();
@@ -422,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.appendChild(r);
     r.addEventListener('animationend', () => r.remove());
   }
+  
   if (!document.getElementById('bt-ripple-style')) {
     const s = document.createElement('style');
     s.id = 'bt-ripple-style';
@@ -429,25 +481,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(s);
   }
 
-  // Custom Cursor
-  const dot  = document.getElementById('cursor-dot');
-  const ring = document.getElementById('cursor-ring');
-  if (dot && ring) {
-    let mx = innerWidth/2, my = innerHeight/2, rx = mx, ry = my;
-    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-    (function loop() {
-      rx += (mx-rx)*.14; ry += (my-ry)*.14;
-      dot.style.left  = mx+'px'; dot.style.top  = my+'px';
-      ring.style.left = rx+'px'; ring.style.top = ry+'px';
-      requestAnimationFrame(loop);
-    })();
-  }
-
   // Sticky Nav Logic
   const mainNav = document.getElementById('main-nav');
   if (mainNav) {
-    const onScroll = () => mainNav.classList.toggle('scrolled', scrollY > 55);
-    addEventListener('scroll', onScroll, { passive: true });
+    const onScroll = () => mainNav.classList.toggle('scrolled', window.scrollY > 55);
+    window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
   }
 
@@ -481,12 +519,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Smooth anchor scroll
- // ... (previous code)
-  
-  // Smooth anchor scroll
   document.querySelectorAll('a[href^="#"]').forEach(a => {
-    // ... logic ...
+    a.addEventListener('click', e => {
+      const href = a.getAttribute('href');
+      if(href === '#') return;
+      const t = document.querySelector(href);
+      if (!t) return;
+      e.preventDefault();
+      window.scrollTo({ top: t.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' });
+    });
   });
-
-}); // end DOMContentLoaded
-

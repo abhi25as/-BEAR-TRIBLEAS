@@ -3,7 +3,6 @@
    Wilderness Luxury Clothing Brand
 ═══════════════════════════════════════════════════════════════ */
 
-/* ── DESIGN TOKENS ─────────────────────────────────────────── */
 :root {
   --forest:   #0e1a10;
   --deep:     #162418;
@@ -27,33 +26,7 @@
 
   --nav-h: 80px;
 }
-/* In style.css */
-body {
-  /* ... your other styles ... */
-  cursor: none; /* Hides the native system cursor */
-}
 
-#cursor-dot{
-    position:fixed;
-    width:8px;
-    height:8px;
-    background:#c9a84c;
-    border-radius:50%;
-    pointer-events:none;
-    z-index:99999;
-    transform:translate(-50%,-50%);
-}
-
-#cursor-ring{
-    position:fixed;
-    width:40px;
-    height:40px;
-    border:2px solid #c9a84c;
-    border-radius:50%;
-    pointer-events:none;
-    z-index:99998;
-    transform:translate(-50%,-50%);
-}
 /* ── RESET ─────────────────────────────────────────────────── */
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html { scroll-behavior:smooth; font-size:16px; }
@@ -64,7 +37,7 @@ body {
   font-weight:300;
   line-height:1.65;
   overflow-x:hidden;
-  cursor:none;
+  cursor:none; /* Hides the native system cursor */
 }
 a  { color:inherit; text-decoration:none; }
 img { display:block; width:100%; object-fit:cover; }
@@ -83,27 +56,34 @@ body::before {
 }
 
 /* ── CUSTOM CURSOR ─────────────────────────────────────────── */
-#cursor-dot,
-#cursor-ring {
-  position:fixed;
-  pointer-events:none;
-  z-index:9999;
-  border-radius:50%;
-  transform:translate(-50%,-50%);
-  top:0; left:0;
-}
 #cursor-dot {
-  width:7px; height:7px;
-  background:var(--gold);
-  transition:opacity .3s;
+    position:fixed;
+    width:8px;
+    height:8px;
+    background:#c9a84c;
+    border-radius:50%;
+    pointer-events:none; /* CRITICAL: Allows clicks to pass through */
+    z-index:99999;
+    transform:translate(-50%,-50%);
+    top:0; left:0;
+    transition:opacity .3s;
 }
+
 #cursor-ring {
-  width:34px; height:34px;
-  border:1.5px solid var(--gold);
-  transition:width .25s var(--ease-expo),
-             height .25s var(--ease-expo),
-             border-color .25s;
+    position:fixed;
+    width:34px;
+    height:34px;
+    border:1.5px solid #c9a84c;
+    border-radius:50%;
+    pointer-events:none; /* CRITICAL: Allows clicks to pass through */
+    z-index:99998;
+    transform:translate(-50%,-50%);
+    top:0; left:0;
+    transition:width .25s var(--ease-expo),
+               height .25s var(--ease-expo),
+               border-color .25s;
 }
+
 body.hov #cursor-ring {
   width:58px; height:58px;
   border-color:var(--rust);
@@ -965,7 +945,7 @@ section { position:relative; }
 .filter-chip.active { border-color:var(--gold); color:var(--gold); background:rgba(201,168,76,.06); }
 .price-range { display:flex; flex-direction:column; gap:.7rem; }
 .price-range input[type=range] {
-  -webkit-appearance:none; width:100%; height:2px;
+  appearance:none; -webkit-appearance:none; width:100%; height:2px;
   background:rgba(201,168,76,.25); outline:none;
 }
 .price-range input[type=range]::-webkit-slider-thumb {
@@ -1124,6 +1104,6 @@ section { position:relative; }
   .form-row { grid-template-columns:1fr; }
   #cart-drawer { width:100%; }
   .products-full-grid { grid-template-columns:1fr; }
- .products-full-grid.list-view .product-card-full { grid-template-columns:1fr; }
+  .products-full-grid.list-view .product-card-full { grid-template-columns:1fr; }
   .collections-head { flex-direction:column; align-items:flex-start; gap:1rem; }
 }
