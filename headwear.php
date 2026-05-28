@@ -99,14 +99,7 @@
           <button class="add-btn-small" onclick="addVariantToCart(402,'Trail Dad Cap','https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=400&q=80')">ADD TO CRATE</button>
         </div>
       </div>
-      <div class="minimalist-card">
-        <img src="https://images.unsplash.com/photo-1601058268499-e52658b8ebf8?auto=format&fit=crop&w=400&q=80" class="product-image">
-        <div class="card-content">
-          <h3 class="card-title">Summit Fisherman Beanie</h3>
-          <select id="variant-403" class="variant-select"><option value="799">One Size — ₹799</option></select>
-          <input type="number" id="qty-403" class="qty-input-full" value="1" min="1" max="20">
-          <button class="add-btn-small" onclick="addVariantToCart(403,'Summit Fisherman Beanie','https://images.unsplash.com/photo-1601058268499-e52658b8ebf8?auto=format&fit=crop&w=400&q=80')">ADD TO CRATE</button>
-        </div>
+  
       </div>
     </div>
   </section>

@@ -100,14 +100,7 @@
           <button class="add-btn-small" onclick="addVariantToCart(202,'Essential Fleece Hoodie','https://images.unsplash.com/photo-1509942774463-acf339cf87d5?auto=format&fit=crop&w=400&q=80')">ADD TO CRATE</button>
         </div>
       </div>
-      <div class="minimalist-card">
-        <img src="https://images.unsplash.com/photo-1536644265691-628d09c64267?auto=format&fit=crop&w=400&q=80" class="product-image">
-        <div class="card-content">
-          <h3 class="card-title">Midnight Stealth Hoodie</h3>
-          <select id="variant-203" class="variant-select"><option value="2899">Medium — ₹2,899</option></select>
-          <input type="number" id="qty-203" class="qty-input-full" value="1" min="1" max="20">
-          <button class="add-btn-small" onclick="addVariantToCart(203,'Midnight Stealth Hoodie','https://images.unsplash.com/photo-1536644265691-628d09c64267?auto=format&fit=crop&w=400&q=80')">ADD TO CRATE</button>
-        </div>
+    
       </div>
       <div class="minimalist-card">
         <img src="https://images.unsplash.com/photo-1614975059251-992f11792b9f?auto=format&fit=crop&w=400&q=80" class="product-image">
