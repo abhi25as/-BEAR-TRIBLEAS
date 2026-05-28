@@ -313,7 +313,7 @@ function _renderCratePage() {
   
   const cart = getCart();
   if (!cart.length) {
-    crateContainer.innerHTML = '<div style="text-align:center;padding:80px 20px;"><p style="font-size:1.2rem;color:#777;margin-bottom:24px;">Your crate is empty.</p><a href="index.php" style="display:inline-block;padding:14px 32px;background:#5C3D26;color:#fff;font-weight:700;border-radius:4px;text-decoration:none;">Continue Shopping →</a></div>';
+    crateContainer.innerHTML = '<div style="text-align:center;padding:80px 20px;"><p style="font-size:1.2rem;color:#777;margin-bottom:24px;">Your crate is empty.</p><a href="index.html" style="display:inline-block;padding:14px 32px;background:#5C3D26;color:#fff;font-weight:700;border-radius:4px;text-decoration:none;">Continue Shopping →</a></div>';
     if (summaryBox) summaryBox.style.display = 'none';
     if (crateCount) crateCount.textContent = '0';
     return;
@@ -442,7 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   });
 
-  // "Add to Cart" interceptor for index.php buttons
+  // "Add to Cart" interceptor for index.html buttons
   document.addEventListener('click', e => {
     const btn = e.target.closest('[data-add-cart]');
     if (!btn) return;
